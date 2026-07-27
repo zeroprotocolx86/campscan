@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #ffffff;
+  color: #000000;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* html5-qrcode renders its own region element. Make it sit cleanly on a
+   white page and fill the available width. */
+#qr-reader {
+  border: none !important;
+}
+
+#qr-reader video {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 0 !important;
+  object-fit: cover;
+}
+
+/* Hide the library's own scan-result UI elements; we render our own text. */
+#qr-reader__dashboard_section_csr,
+#qr-reader__dashboard_section_swaplink,
+#qr-reader__scan_region img,
+#qr-reader__header_message,
+#qr-reader__dashboard_section_fsr {
+  display: none !important;
+}
+
+#qr-reader__dashboard {
+  padding: 0 !important;
+}
