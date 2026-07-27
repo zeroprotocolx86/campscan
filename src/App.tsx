@@ -95,14 +95,24 @@ export default function App() {
       await scanner.start(
         { facingMode: 'environment' },
         {
-          fps: 10,
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            // Square scan area that fits the shorter side.
-            const minSide = Math.min(viewfinderWidth, viewfinderHeight)
-            const box = Math.floor(minSide * 0.8)
-            return { width: box, height: box }
-          },
+          // Higher frame rate -> faster detection of new QR codes.
+          fps: 15,
+          // Use the FULL viewfinder as the scan region. The library's small
+          // default box is the main reason a QR must be aimed pixel-perfect;
+          // scanning the whole frame means any QR anywhere in view is read.
+          qrbox: (viewfinderWidth, viewfinderHeight) => ({
+            width: viewfinderWidth,
+            height: viewfinderHeight,
+          }),
           aspectRatio: 1.0,
+          // Request the highest-resolution back camera stream available. A
+          // sharper image keeps the QR scannable even with glare, slight
+          // blur, or an angled print.
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
         },
         onScanSuccess,
         () => {},
@@ -225,16 +235,10 @@ export default function App() {
               aria-label="Вікно камери"
             />
 
-            {/* Subtle vignette so the scan frame stands out on any background. */}
-            <div className="pointer-events-none absolute inset-0 rounded-[28px] ring-1 ring-inset ring-black/5" />
-
-            {/* Scan corner markers, purely decorative, no animation. */}
-            <div className="pointer-events-none absolute inset-6">
-              <Corner className="left-0 top-0 rounded-tl-xl border-l-[3px] border-t-[3px]" />
-              <Corner className="right-0 top-0 rounded-tr-xl border-r-[3px] border-t-[3px]" />
-              <Corner className="bottom-0 left-0 rounded-bl-xl border-b-[3px] border-l-[3px]" />
-              <Corner className="bottom-0 right-0 rounded-br-xl border-b-[3px] border-r-[3px]" />
-            </div>
+            {/* Thin inner border framing the whole viewfinder. The scanner
+               now reads the entire frame, so there is no small target to
+               aim for anymore. */}
+            <div className="pointer-events-none absolute inset-0 rounded-[28px] ring-1 ring-inset ring-black/10" />
 
             {/* While the camera is starting, a calm overlay. */}
             {cameraState === 'starting' && (
@@ -247,6 +251,14 @@ export default function App() {
             )}
           </div>
         </section>
+
+        {/* Practical scanning tip shown while the result is still the hint. */}
+        {display.kind === 'hint' && cameraState === 'running' && (
+          <p className="mt-4 px-2 text-center text-sm text-slate-400">
+            Тримайте QR-код у межах екрана. Приблизна відстань — 15-30 см.
+            Уникайте прямих відблисків на папері.
+          </p>
+        )}
 
         {/* Result block. Distinct visual treatment per state. */}
         <section className="mt-8 w-full">
@@ -270,15 +282,6 @@ export default function App() {
         )}
       </main>
     </div>
-  )
-}
-
-function Corner({ className }: { className?: string }) {
-  return (
-    <span
-      className={`absolute h-8 w-8 border-blue-500/80 ${className ?? ''}`}
-      aria-hidden="true"
-    />
   )
 }
 
