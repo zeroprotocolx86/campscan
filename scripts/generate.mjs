@@ -3,9 +3,9 @@
 // Run with:  node scripts/generate.mjs   (or:  npm run generate)
 //
 // Output:
-//   src/data/codes.json          database of every code -> message
-//   public/qr/<word>.png         one QR per real word (encodes the code only)
-//   public/qr/decoys/ПустушкаN.png  one QR per decoy (encodes the code only)
+//   src/data/codes.json              database of every code -> message
+//   public/qr/words/<word>.png       one QR per real word (encodes the code only)
+//   public/qr/decoys/ПустушкаN.png   one QR per decoy (encodes the code only)
 //
 // The same set of words / decoys is listed below so the output is deterministic
 // across runs. Codes are random 6-character strings without ambiguous symbols
@@ -45,6 +45,8 @@ const DECOYS = [
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 const CODE_LENGTH = 6
+// Higher resolution than before so the QR stays sharp when printed large.
+const QR_SIZE = 768
 
 function randomCode(existing) {
   // Try random generation first; fall back to a deterministic scan if a
@@ -78,14 +80,30 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true })
 }
 
+async function cleanDir(dir) {
+  // Remove only PNG files so previously generated QRs (with old names) do not
+  // linger in the folder after a re-run.
+  let entries = []
+  try {
+    entries = await fs.readdir(dir)
+  } catch {
+    return // directory does not exist yet, nothing to clean
+  }
+  for (const entry of entries) {
+    if (entry.toLowerCase().endsWith('.png')) {
+      await fs.unlink(path.join(dir, entry))
+    }
+  }
+}
+
 async function writePng(filePath, payload) {
   // High error correction so the QR stays scannable even if printed on
-  // rough paper. encodes ONLY the code string.
+  // rough paper. Encodes ONLY the code string.
   const buffer = await QRCode.toBuffer(payload, {
     type: 'png',
     errorCorrectionLevel: 'H',
     margin: 2,
-    width: 512,
+    width: QR_SIZE,
     color: {
       dark: '#000000',
       light: '#ffffff',
@@ -98,18 +116,24 @@ async function main() {
   const usedCodes = new Set()
   const records = []
 
-  const qrDir = path.join(root, 'public', 'qr')
-  const decoyDir = path.join(qrDir, 'decoys')
-  await ensureDir(qrDir)
+  const wordsDir = path.join(root, 'public', 'qr', 'words')
+  const decoyDir = path.join(root, 'public', 'qr', 'decoys')
+  // Also tidy the old top-level qr folder from any stale PNGs.
+  const qrRoot = path.join(root, 'public', 'qr')
+
+  await ensureDir(qrRoot)
+  await cleanDir(qrRoot)
+  await ensureDir(wordsDir)
   await ensureDir(decoyDir)
+  await cleanDir(wordsDir)
+  await cleanDir(decoyDir)
 
   // Real words.
   for (const word of WORDS) {
     const code = randomCode(usedCodes)
     usedCodes.add(code)
     records.push({ code, word })
-    const safe = word // keep the Cyrillic name as the file name
-    await writePng(path.join(qrDir, `${safe}.png`), code)
+    await writePng(path.join(wordsDir, `${word}.png`), code)
   }
 
   // Decoys.
