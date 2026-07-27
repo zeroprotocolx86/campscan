@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
 html,
 body,
 #root {
@@ -11,23 +15,27 @@ body,
 }
 
 body {
-  background: #ffffff;
-  color: #000000;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: #f7f7f9;
+  color: #0a0a0a;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* html5-qrcode renders its own region element. Make it sit cleanly on a
-   white page and fill the available width. */
+/* html5-qrcode renders its own region element. Neutralise its defaults so the
+   video sits inside our styled card without borders or extra chrome. */
 #qr-reader {
   border: none !important;
+  background: transparent !important;
 }
 
 #qr-reader video {
   width: 100% !important;
-  height: auto !important;
+  height: 100% !important;
   border-radius: 0 !important;
   object-fit: cover;
+  display: block;
 }
 
 /* Hide the library's own scan-result UI elements; we render our own text. */
@@ -35,10 +43,21 @@ body {
 #qr-reader__dashboard_section_swaplink,
 #qr-reader__scan_region img,
 #qr-reader__header_message,
-#qr-reader__dashboard_section_fsr {
+#qr-reader__dashboard_section_fsr,
+#qr-reader__status_span {
   display: none !important;
 }
 
 #qr-reader__dashboard {
   padding: 0 !important;
+}
+
+#qr-reader__scan_region {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* The library injects a scan region highlight; keep it subtle and on-brand. */
+#qr-reader__scan_region > canvas {
+  border-radius: 16px;
 }

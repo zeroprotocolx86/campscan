@@ -15,17 +15,54 @@ const PERMISSION_PROMPT = 'Надати доступ до камери'
 
 const DEFAULT_HINT = 'Наведіть камеру на QR-код'
 
-type CameraState = 'idle' | 'running' | 'needs-permission'
+type CameraState = 'starting' | 'running' | 'needs-permission'
 
 // Build a quick lookup table: scanned code -> word to show.
 const lookup = new Map<string, string>()
+// A set of messages that are decoys ("try again") so we can style them apart.
+const decoyMessages = new Set<string>()
 for (const record of codes) {
   lookup.set(record.code, record.word)
 }
 
+// Decoy detection: a record is a decoy if its "word" is not one of the
+// expected Bible-verse words. We pre-compute that set from the data file.
+const VERSE_WORDS = new Set([
+  'Не',
+  'будь',
+  'переможений',
+  'злом',
+  'але',
+  'перемагай',
+  'зло',
+  'добром',
+  'Римлян',
+  '12',
+  '21',
+])
+for (const record of codes) {
+  if (!VERSE_WORDS.has(record.word)) {
+    decoyMessages.add(record.word)
+  }
+}
+
+interface DisplayState {
+  text: string
+  kind: 'hint' | 'word' | 'decoy'
+}
+
+const HINT_DISPLAY: DisplayState = {
+  text: DEFAULT_HINT,
+  kind: 'hint',
+}
+
 export default function App() {
-  const [display, setDisplay] = useState<string>(DEFAULT_HINT)
-  const [cameraState, setCameraState] = useState<CameraState>('idle')
+  const [display, setDisplay] = useState<DisplayState>(HINT_DISPLAY)
+  const [cameraState, setCameraState] = useState<CameraState>('starting')
+
+  // Bump a counter each time a new code is accepted so the result block can
+  // re-trigger its entrance animation.
+  const [scanSeq, setScanSeq] = useState(0)
 
   // html5-qrcode instance lives for the whole component lifetime.
   const scannerRef = useRef<Html5Qrcode | null>(null)
@@ -60,8 +97,7 @@ export default function App() {
         {
           fps: 10,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            // Square scan area that fits the shorter side, capped so small
-            // QR codes on screen still get enough of the frame.
+            // Square scan area that fits the shorter side.
             const minSide = Math.min(viewfinderWidth, viewfinderHeight)
             const box = Math.floor(minSide * 0.8)
             return { width: box, height: box }
@@ -69,12 +105,11 @@ export default function App() {
           aspectRatio: 1.0,
         },
         onScanSuccess,
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
         () => {},
       )
 
       setCameraState('running')
-    } catch (err) {
+    } catch {
       // Most common failure: permission denied or never granted.
       scannerRef.current = null
       if (scanner) {
@@ -102,8 +137,6 @@ export default function App() {
     // A different code has appeared.
     if (lockedRef.current) {
       // We are still inside the cooldown window of the previous code.
-      // Ignore the new code until at least COOLDOWN_MS has passed since the
-      // previous code was last seen.
       if (now - lastSeenRef.current < COOLDOWN_MS) {
         return
       }
@@ -120,7 +153,11 @@ export default function App() {
     // Only real codes (and decoys, which are also in the database) are shown.
     // Anything else is ignored silently -- no popups, no error text.
     if (word !== undefined) {
-      setDisplay(word)
+      setDisplay({
+        text: word,
+        kind: decoyMessages.has(word) ? 'decoy' : 'word',
+      })
+      setScanSeq((n) => n + 1)
     }
   }, [])
 
@@ -158,41 +195,118 @@ export default function App() {
   }, [startCamera])
 
   const handleGrantPermission = () => {
-    // Re-arm and try starting the camera again.
+    setCameraState('starting')
     startCamera()
   }
 
   return (
-    <div className="flex min-h-full w-full flex-col items-center bg-white">
-      <main className="flex w-full max-w-2xl flex-col items-center px-4 pb-8 pt-6">
-        {/* Camera always first, on top. */}
-        <div className="w-full">
-          <div
-            id={READER_ELEMENT_ID}
-            className="w-full overflow-hidden bg-white"
-            aria-label="Вікно камери"
-          />
-        </div>
+    <div className="flex min-h-full w-full flex-col items-center bg-[#f7f7f9] px-4 py-8 sm:py-12">
+      <main className="flex w-full max-w-md flex-col items-center">
+        {/* Header: a small wordmark above the camera card. */}
+        <header className="mb-6 flex flex-col items-center text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 shadow-sm">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                cameraState === 'running'
+                  ? 'bg-emerald-500'
+                  : 'bg-slate-300'
+              }`}
+            />
+            Сканер активний
+          </span>
+        </header>
 
-        {/* Result of the last scan, large text under the camera. */}
-        <p
-          className="mt-8 w-full text-center text-3xl font-semibold leading-snug text-black sm:text-4xl"
-          aria-live="polite"
-        >
-          {display}
-        </p>
+        {/* Camera card: rounded, soft shadow, inner scan overlay. */}
+        <section className="relative w-full overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_10px_40px_-12px_rgba(15,23,42,0.25)]">
+          <div className="relative aspect-square w-full">
+            <div
+              id={READER_ELEMENT_ID}
+              className="absolute inset-0 h-full w-full"
+              aria-label="Вікно камери"
+            />
+
+            {/* Subtle vignette so the scan frame stands out on any background. */}
+            <div className="pointer-events-none absolute inset-0 rounded-[28px] ring-1 ring-inset ring-black/5" />
+
+            {/* Scan corner markers, purely decorative, no animation. */}
+            <div className="pointer-events-none absolute inset-6">
+              <Corner className="left-0 top-0 rounded-tl-xl border-l-[3px] border-t-[3px]" />
+              <Corner className="right-0 top-0 rounded-tr-xl border-r-[3px] border-t-[3px]" />
+              <Corner className="bottom-0 left-0 rounded-bl-xl border-b-[3px] border-l-[3px]" />
+              <Corner className="bottom-0 right-0 rounded-br-xl border-b-[3px] border-r-[3px]" />
+            </div>
+
+            {/* While the camera is starting, a calm overlay. */}
+            {cameraState === 'starting' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/40 backdrop-blur-sm">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                <span className="text-sm font-medium text-white">
+                  Запуск камери...
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Result block. Distinct visual treatment per state. */}
+        <section className="mt-8 w-full">
+          <ResultBlock key={scanSeq} display={display} />
+        </section>
 
         {/* A single blue button, shown only if the browser asks again. */}
         {cameraState === 'needs-permission' && (
-          <button
-            type="button"
-            onClick={handleGrantPermission}
-            className="mt-8 rounded-md bg-blue-600 px-6 py-3 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-          >
-            {PERMISSION_PROMPT}
-          </button>
+          <div className="mt-8 w-full rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+            <p className="text-sm font-medium text-amber-900">
+              Доступ до камери потрібно надати повторно.
+            </p>
+            <button
+              type="button"
+              onClick={handleGrantPermission}
+              className="mt-4 w-full rounded-xl bg-blue-600 px-6 py-3.5 text-base font-semibold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+            >
+              {PERMISSION_PROMPT}
+            </button>
+          </div>
         )}
       </main>
+    </div>
+  )
+}
+
+function Corner({ className }: { className?: string }) {
+  return (
+    <span
+      className={`absolute h-8 w-8 border-blue-500/80 ${className ?? ''}`}
+      aria-hidden="true"
+    />
+  )
+}
+
+function ResultBlock({ display }: { display: DisplayState }) {
+  if (display.kind === 'hint') {
+    return (
+      <div className="animate-fade-in rounded-2xl border border-dashed border-slate-300 bg-white/70 px-6 py-7 text-center">
+        <p className="text-lg font-medium text-slate-400">{display.text}</p>
+      </div>
+    )
+  }
+
+  if (display.kind === 'decoy') {
+    return (
+      <div className="animate-pop-in rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+        <p className="text-xl font-semibold leading-snug text-slate-500">
+          {display.text}
+        </p>
+      </div>
+    )
+  }
+
+  // Real word from the verse.
+  return (
+    <div className="animate-pop-in rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50 to-white px-6 py-8 text-center shadow-[0_8px_30px_-12px_rgba(37,99,235,0.35)]">
+      <p className="text-4xl font-bold leading-tight text-slate-900 sm:text-5xl">
+        {display.text}
+      </p>
     </div>
   )
 }
