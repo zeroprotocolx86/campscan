@@ -95,8 +95,10 @@ export default function App() {
       await scanner.start(
         { facingMode: 'environment' },
         {
-          // Higher frame rate -> faster detection of new QR codes.
-          fps: 15,
+          // Maximum frame rate. html5-qrcode caps the value internally, so a
+          // large number effectively means "scan as fast as the camera feeds
+          // frames", giving the fastest possible detection of new QR codes.
+          fps: 120,
           // Use the FULL viewfinder as the scan region. The library's small
           // default box is the main reason a QR must be aimed pixel-perfect;
           // scanning the whole frame means any QR anywhere in view is read.
